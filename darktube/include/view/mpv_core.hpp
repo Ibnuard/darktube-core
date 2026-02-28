@@ -29,6 +29,7 @@ public:
     bool isStopped() const;
     bool isPlaying() const;
     bool isPaused() const;
+    bool isBuffering() const;
 
     void resume();
     void pause();
@@ -41,6 +42,7 @@ public:
 
     bool video_stopped = true;
     bool video_playing = false;
+    bool buffering = false;
     bool redraw = false;
 
 private:
@@ -49,10 +51,12 @@ private:
     brls::Rect rect = {0, 0, 1920, 1080};
 
     int default_framebuffer = 0;
+    int flip_y = 1; // 1 to enable flipping vertically in OpenGL
     
     mpv_opengl_fbo mpv_fbo{0, 1280, 720, 0};
-    mpv_render_param mpv_params[3] = {
+    mpv_render_param mpv_params[4] = {
         {MPV_RENDER_PARAM_OPENGL_FBO, &mpv_fbo},
+        {MPV_RENDER_PARAM_FLIP_Y, &flip_y},
         {MPV_RENDER_PARAM_INVALID, nullptr},
     };
 

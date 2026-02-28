@@ -42,21 +42,16 @@ set(APP_VERSION "${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_REVISION}")
 find_package(Threads REQUIRED)
 list(APPEND APP_PLATFORM_LIB ${CMAKE_THREAD_LIBS_INIT})
 
-# Find libmpv
-if (PLATFORM_DESKTOP)
-    find_package(MPV REQUIRED)
-    message(STATUS "Found libmpv: ${MPV_VERSION} ${MPV_INCLUDE_DIR} ${MPV_LIBRARY}")
-    list(APPEND APP_PLATFORM_INCLUDE ${MPV_INCLUDE_DIR})
-    list(APPEND APP_PLATFORM_LIB ${MPV_LIBRARY})
-else ()
-    # Cross compile (Switch)
-    find_package(PkgConfig REQUIRED)
-    pkg_search_module(MPV REQUIRED mpv)
-    message(STATUS "Found libmpv: ${MPV_VERSION} ${MPV_INCLUDE_DIRS} ${MPV_STATIC_LIBRARIES}")
-    list(APPEND APP_PLATFORM_INCLUDE ${MPV_INCLUDE_DIRS})
-    list(APPEND APP_PLATFORM_LIB ${MPV_STATIC_LIBRARIES})
-    link_directories(${MPV_LIBRARY_DIRS})
-endif ()
+# Set specific Switch target
+set(PLATFORM_SWITCH ON)
+
+# Cross compile (Switch)
+find_package(PkgConfig REQUIRED)
+pkg_search_module(MPV REQUIRED mpv)
+message(STATUS "Found libmpv: ${MPV_VERSION} ${MPV_INCLUDE_DIRS} ${MPV_STATIC_LIBRARIES}")
+list(APPEND APP_PLATFORM_INCLUDE ${MPV_INCLUDE_DIRS})
+list(APPEND APP_PLATFORM_LIB ${MPV_STATIC_LIBRARIES})
+link_directories(${MPV_LIBRARY_DIRS})
 
 list(APPEND APP_PLATFORM_OPTION
    -DBUILD_PACKAGE_NAME=${PACKAGE_NAME}
@@ -78,9 +73,7 @@ endif ()
 
 # source files
 file(GLOB_RECURSE MAIN_SRC darktube/source/*.cpp)
-if (PLATFORM_SWITCH)
-    list(APPEND MAIN_SRC ${BOREALIS_LIBRARY}/lib/platforms/switch/switch_wrapper.c)
-endif ()
+list(APPEND MAIN_SRC ${BOREALIS_LIBRARY}/lib/platforms/switch/switch_wrapper.c)
 
 # build borealis
 add_subdirectory(library/borealis/library)
@@ -90,27 +83,17 @@ program_target(${PROJECT_NAME} "${MAIN_SRC}")
 set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 17)
 
 # building release file
-if (PLATFORM_SWITCH)
-    if (USE_DEKO3D)
-        gen_dksh("${PROJECT_RESOURCES}/shaders")
-    endif ()
-    add_custom_target(${PROJECT_NAME}.nro
-        DEPENDS ${PROJECT_NAME}
-        COMMAND ${NX_NACPTOOL_EXE} --create "${PROJECT_NAME}" "${PROJECT_AUTHOR}" "${APP_VERSION}" ${PROJECT_NAME}.nacp
-        COMMAND ${CMAKE_COMMAND} -E copy_directory ${PROJECT_RESOURCES} ${CMAKE_BINARY_DIR}/resources
-        COMMAND ${CMAKE_COMMAND} -E remove -f ${CMAKE_BINARY_DIR}/resources/font/*.txt
-        COMMAND ${NX_ELF2NRO_EXE} ${PROJECT_NAME}.elf ${PROJECT_NAME}.nro --icon=${PROJECT_ICON}
-            --nacp=${PROJECT_NAME}.nacp --romfsdir=${CMAKE_BINARY_DIR}/resources
-        ALL
-    )
-elseif (PLATFORM_DESKTOP)
-    if (NOT USE_LIBROMFS)
-        add_custom_target(${PROJECT_NAME}.data
-            COMMAND "${CMAKE_COMMAND}" -E copy_directory ${PROJECT_RESOURCES} ${CMAKE_BINARY_DIR}/resources
-        )
-        add_dependencies(${PROJECT_NAME} ${PROJECT_NAME}.data)
-    endif ()
+if (USE_DEKO3D)
+    gen_dksh("${PROJECT_RESOURCES}/shaders")
 endif ()
+add_custom_target(${PROJECT_NAME}.nro ALL
+    DEPENDS ${PROJECT_NAME}
+    COMMAND ${NX_NACPTOOL_EXE} --create "${PROJECT_NAME}" "${PROJECT_AUTHOR}" "${APP_VERSION}" ${PROJECT_NAME}.nacp
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${PROJECT_RESOURCES} ${CMAKE_BINARY_DIR}/resources
+    COMMAND ${CMAKE_COMMAND} -E remove -f ${CMAKE_BINARY_DIR}/resources/font/*.txt
+    COMMAND ${NX_ELF2NRO_EXE} ${PROJECT_NAME}.elf ${PROJECT_NAME}.nro --icon=${PROJECT_ICON}
+        --nacp=${PROJECT_NAME}.nacp --romfsdir=${CMAKE_BINARY_DIR}/resources
+)
 
 target_include_directories(${PROJECT_NAME} PRIVATE darktube/include ${APP_PLATFORM_INCLUDE})
 target_compile_options(${PROJECT_NAME} PRIVATE -ffunction-sections -fdata-sections -Wunused-variable ${APP_PLATFORM_OPTION})

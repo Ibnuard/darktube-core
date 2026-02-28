@@ -90,6 +90,7 @@ void MPVCore::init() {
     check_error(mpv_observe_property(mpv, 3, "duration", MPV_FORMAT_INT64));
     check_error(mpv_observe_property(mpv, 4, "playback-time", MPV_FORMAT_DOUBLE));
     check_error(mpv_observe_property(mpv, 12, "pause", MPV_FORMAT_FLAG));
+    check_error(mpv_observe_property(mpv, 13, "paused-for-cache", MPV_FORMAT_FLAG)); // Observe buffering state
 
     // Create render context for OpenGL
     int advanced_control{1};
@@ -202,6 +203,9 @@ void MPVCore::eventMainLoop() {
                     if (strcmp(prop->name, "core-idle") == 0) {
                         int idle = *(int *)prop->data;
                         video_playing = !idle;
+                    } else if (strcmp(prop->name, "paused-for-cache") == 0) {
+                        int cache_paused = *(int *)prop->data;
+                        buffering = !!cache_paused;
                     }
                 }
                 break;
@@ -226,6 +230,7 @@ mpv_handle *MPVCore::getHandle() { return this->mpv; }
 bool MPVCore::isStopped() const { return video_stopped; }
 bool MPVCore::isPlaying() const { return video_playing; }
 bool MPVCore::isPaused() const { return !video_playing && !video_stopped; }
+bool MPVCore::isBuffering() const { return buffering; }
 
 void MPVCore::resume() { mpv_command_string(mpv, "set pause no"); }
 void MPVCore::pause() { mpv_command_string(mpv, "set pause yes"); }

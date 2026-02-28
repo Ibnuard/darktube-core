@@ -1,0 +1,41 @@
+# Build directory
+/build/
+
+# CMake artifacts
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+CMakeScripts/
+Testing/
+install/
+*.cmake
+
+# Compiled binaries and object files
+*.o
+*.d
+*.a
+*.so
+*.elf
+
+# Nintendo Switch specific builds
+*.nro
+*.nacp
+*.pfs0
+*.nsp
+
+# IDEs and Editors
+.vscode/
+.idea/
+*.swp
+*~
+*.bak
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Any local custom build scripts or config that shouldn't be shared
+*.user
+*.suo
+.vs/
