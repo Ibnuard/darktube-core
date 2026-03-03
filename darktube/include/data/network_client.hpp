@@ -15,7 +15,7 @@ namespace Data {
         ~NetworkClient();
 
         using Callback = std::function<void(const std::vector<Domain::VideoItem>&, const std::string& error)>;
-        using StreamCallback = std::function<void(const std::string& url, const std::string& error)>;
+        using StreamCallback = std::function<void(const Domain::StreamInfo& info, const std::string& error)>;
 
         void getTrending(Callback cb);
         void search(const std::string& query, Callback cb);

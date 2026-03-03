@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 namespace DarkTube {
 namespace Domain {
@@ -21,6 +22,21 @@ namespace Domain {
         std::string description;
         std::string views;
         std::string date;
+    };
+
+    struct StreamFormat {
+        std::string formatId;
+        std::string resolution;
+        std::string url;
+        std::string quality;
+    };
+
+    struct StreamInfo {
+        std::string title;
+        std::string url; // default url
+        std::string thumbnailUrl;
+        int duration = 0;
+        std::vector<StreamFormat> formats;
     };
 
 } // namespace Domain

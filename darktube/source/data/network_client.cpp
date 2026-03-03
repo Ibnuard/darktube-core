@@ -160,12 +160,12 @@ namespace Data {
         brls::async([this, videoId, cb]() {
             std::string baseUrl = getBaseUrl();
             if (baseUrl.empty()) {
-                brls::sync([cb]() { cb("", "No server configured"); });
+                brls::sync([cb]() { cb({}, "No server configured"); });
                 return;
             }
 
             std::string response = performGet(baseUrl + "/api/stream?id=" + videoId);
-            std::string streamUrl = "";
+            Domain::StreamInfo streamInfo;
             std::string error = "";
 
             try {
@@ -173,7 +173,21 @@ namespace Data {
                 
                 json j = json::parse(response);
                 if (j.contains("url")) {
-                    streamUrl = j["url"];
+                    streamInfo.url = j.value("url", "");
+                    streamInfo.title = j.value("title", "");
+                    streamInfo.thumbnailUrl = j.value("thumbnail", "");
+                    streamInfo.duration = j.value("duration", 0);
+
+                    if (j.contains("formats") && j["formats"].is_array()) {
+                        for (auto& f : j["formats"]) {
+                            Domain::StreamFormat format;
+                            format.formatId = f.value("format_id", "");
+                            format.resolution = f.value("resolution", "");
+                            format.url = f.value("url", "");
+                            format.quality = f.value("quality", "");
+                            streamInfo.formats.push_back(format);
+                        }
+                    }
                 } else if (j.contains("error")) {
                     error = j["error"];
                 } else {
@@ -183,7 +197,7 @@ namespace Data {
                 error = e.what();
             }
 
-            brls::sync([cb, streamUrl, error]() { cb(streamUrl, error); });
+            brls::sync([cb, streamInfo, error]() { cb(streamInfo, error); });
         });
     }
 

@@ -26,7 +26,7 @@ namespace Presentation {
 
     // --- PlayerOverlayView ---
 
-    PlayerOverlayView::PlayerOverlayView(const std::string& title) : videoTitle(title) {
+    PlayerOverlayView::PlayerOverlayView(const Domain::StreamInfo& info) : streamInfo(info) {
         this->setWidthPercentage(100);
         this->setHeightPercentage(100);
         this->setFocusable(true);
@@ -49,14 +49,6 @@ namespace Presentation {
         bufferingLoader = new brls::ProgressSpinner();
         bufferingLoader->setVisibility(brls::Visibility::INVISIBLE);
         centerContainer->addView(bufferingLoader);
-
-        loadingLabel = new brls::Label();
-        loadingLabel->setText("Loading...");
-        loadingLabel->setFontSize(22);
-        loadingLabel->setTextColor(Theme::TextSecondary);
-        loadingLabel->setMarginTop(15);
-        loadingLabel->setVisibility(brls::Visibility::INVISIBLE);
-        centerContainer->addView(loadingLabel);
         
         this->addView(centerContainer);
         this->addView(bottomBar);
@@ -117,6 +109,16 @@ namespace Presentation {
             this->toggleOSD(false);
             return true;
         });
+
+        this->registerAction("Quality", brls::BUTTON_Y, [this](brls::View* view) {
+            this->openQualitySelector();
+            return true;
+        });
+
+        // Touch: tap anywhere to toggle OSD
+        this->addGestureRecognizer(new brls::TapGestureRecognizer(this, [this]() {
+            this->toggleOSD(!this->osdVisible);
+        }, brls::TapGestureConfig(false, brls::SOUND_NONE, brls::SOUND_NONE, brls::SOUND_NONE)));
     }
 
     void PlayerOverlayView::toggleOSD(bool show) {
@@ -137,21 +139,15 @@ namespace Presentation {
 
     void PlayerOverlayView::frame(brls::FrameContext* ctx) {
         // Poll for buffering state and toggle the loader
-        bool showSpinner = loadingStream || MPVCore::instance().isBuffering();
+        bool showSpinner = MPVCore::instance().isBuffering();
         
         if (showSpinner) {
             if (bufferingLoader->getVisibility() != brls::Visibility::VISIBLE) {
                 bufferingLoader->setVisibility(brls::Visibility::VISIBLE);
             }
-            if (loadingStream && loadingLabel->getVisibility() != brls::Visibility::VISIBLE) {
-                loadingLabel->setVisibility(brls::Visibility::VISIBLE);
-            }
         } else {
             if (bufferingLoader->getVisibility() == brls::Visibility::VISIBLE) {
                 bufferingLoader->setVisibility(brls::Visibility::INVISIBLE);
-            }
-            if (loadingLabel->getVisibility() == brls::Visibility::VISIBLE) {
-                loadingLabel->setVisibility(brls::Visibility::INVISIBLE);
             }
         }
         
@@ -183,7 +179,7 @@ namespace Presentation {
         bar->setPadding(40, 60, 0, 60); // Top margin
 
         brls::Label* videoTitleLabel = new brls::Label();
-        videoTitleLabel->setText(videoTitle + " | DarkTube");
+        videoTitleLabel->setText(streamInfo.title + " | DarkTube");
         videoTitleLabel->setFontSize(28);
         videoTitleLabel->setTextColor(Theme::TextPrimary);
         bar->addView(videoTitleLabel);
@@ -262,6 +258,7 @@ namespace Presentation {
         rightGroup->setAlignItems(brls::AlignItems::CENTER);
 
         rightGroup->addView(UIUtils::createHint(nvgRGB(50, 160, 60), "A", "Play/Pause"));
+        rightGroup->addView(UIUtils::createHint(nvgRGB(120, 120, 220), "Y", "Quality"));
         rightGroup->addView(UIUtils::createHint(nvgRGB(220, 180, 0), "Left/Right", "Seek"));
         rightGroup->addView(UIUtils::createHint(nvgRGB(200, 40, 40), "B", "Back"));
 
@@ -317,29 +314,35 @@ namespace Presentation {
         brls::Box::onFocusLost();
     }
 
-    void PlayerOverlayView::setLoadingStream(bool loading) {
-        loadingStream = loading;
-        if (loading) {
-            bufferingLoader->setVisibility(brls::Visibility::VISIBLE);
-            loadingLabel->setVisibility(brls::Visibility::VISIBLE);
-        } else {
-            loadingLabel->setVisibility(brls::Visibility::INVISIBLE);
+    void PlayerOverlayView::openQualitySelector() {
+        if (streamInfo.formats.empty()) {
+            brls::Dialog* dialog = new brls::Dialog("No other qualities available");
+            dialog->addButton("OK", []() {});
+            dialog->open();
+            return;
         }
+
+        brls::Dialog* dialog = new brls::Dialog("Select Quality");
+        for (const auto& format : streamInfo.formats) {
+            std::string label = format.quality + " (" + format.resolution + ")";
+            std::string url = format.url;
+            dialog->addButton(label, [url]() {
+                brls::Logger::info("Switching to quality: {}", url);
+                MPVCore::instance().setUrl(url);
+                MPVCore::instance().resume();
+            });
+        }
+        dialog->addButton("Cancel", []() {});
+        dialog->open();
     }
 
     // --- PlayerActivity ---
 
-    PlayerActivity::PlayerActivity(const std::string& url, const std::string& title, const std::string& videoId) 
-        : videoUrl(url), videoTitle(title), videoId(videoId) {
-        brls::Logger::info("User pushed PlayerActivity: " + videoTitle);
-        
-        if (videoUrl.empty() && !videoId.empty()) {
-            brls::Logger::info("URL empty, fetching stream for ID: {}", videoId);
-            // Loading state will be set in createContentView
-        } else if (!videoUrl.empty()) {
-            MPVCore::instance().setUrl(videoUrl);
-            MPVCore::instance().resume();
-        }
+    PlayerActivity::PlayerActivity(const Domain::StreamInfo& info) 
+        : streamInfo(info) {
+        brls::Logger::info("User pushed PlayerActivity: " + streamInfo.title);
+        MPVCore::instance().setUrl(streamInfo.url);
+        MPVCore::instance().resume();
     }
 
     PlayerActivity::~PlayerActivity() {
@@ -351,29 +354,11 @@ namespace Presentation {
         VideoPlayerView* videoView = new VideoPlayerView();
         
         // Add overlay that fades in/out on interaction
-        overlay = new PlayerOverlayView(videoTitle);
+        PlayerOverlayView* overlay = new PlayerOverlayView(streamInfo);
         videoView->addView(overlay);
 
         // Ensure the overlay gets focus so A/B inputs are not swallowed by the VideoView
         brls::Application::giveFocus(overlay);
-
-        // If we need to fetch the stream URL, start loading now
-        if (videoUrl.empty() && !videoId.empty()) {
-            overlay->setLoadingStream(true);
-            Data::NetworkClient::instance().getStream(videoId, [this](const std::string& url, const std::string& error) {
-                if (!error.empty()) {
-                    brls::Logger::error("Failed to fetch stream: {}", error);
-                    brls::Application::popActivity();
-                    return;
-                }
-                this->videoUrl = url;
-                if (this->overlay) {
-                    this->overlay->setLoadingStream(false);
-                }
-                MPVCore::instance().setUrl(this->videoUrl);
-                MPVCore::instance().resume();
-            });
-        }
 
         return videoView;
     }

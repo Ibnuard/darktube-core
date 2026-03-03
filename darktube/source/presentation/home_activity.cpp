@@ -303,7 +303,26 @@ namespace Presentation {
 
                 thumbnail->registerAction("Play", brls::BUTTON_A, [video](brls::View* view) {
                     brls::Logger::info("Play Video clicked: " + video.title);
-                    brls::Application::pushActivity(new PlayerActivity("", video.title, video.id));
+                    
+                    // Show loading dialog
+                    brls::Dialog* loadingDialog = new brls::Dialog("main/getting_stream"_i18n);
+                    loadingDialog->setCancelable(false);
+                    loadingDialog->open();
+
+                    Data::NetworkClient::instance().getStream(video.id, [loadingDialog, video](const Domain::StreamInfo& info, const std::string& error) {
+                        loadingDialog->close([info, error, video]() {
+                            if (!error.empty()) {
+                                brls::Logger::error("Failed to fetch stream: {}", error);
+                                brls::Dialog* errorDialog = new brls::Dialog("Failed to get stream: " + error);
+                                errorDialog->addButton("OK", []() {});
+                                errorDialog->open();
+                                return;
+                            }
+                            
+                            // Push player with fetched info
+                            brls::Application::pushActivity(new PlayerActivity(info));
+                        });
+                    });
                     return true;
                 });
                 cardContainer->addView(thumbnail);

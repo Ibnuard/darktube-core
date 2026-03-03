@@ -1,6 +1,7 @@
 #pragma once
 
 #include <borealis.hpp>
+#include "../domain/models.hpp"
 
 namespace DarkTube {
 namespace Presentation {
@@ -13,14 +14,12 @@ namespace Presentation {
 
     class PlayerOverlayView : public brls::Box {
     public:
-        PlayerOverlayView(const std::string& title);
+        PlayerOverlayView(const Domain::StreamInfo& info);
         
         void onFocusGained() override;
         void onFocusLost() override;
         void toggleOSD(bool show);
         void frame(brls::FrameContext* ctx) override;
-
-        void setLoadingStream(bool loading);
 
     private:
         brls::Box* topBar;
@@ -29,12 +28,10 @@ namespace Presentation {
         brls::Label* statusLabel;
         brls::Label* timeLabel;
         brls::ProgressSpinner* bufferingLoader;
-        brls::Label* loadingLabel;
         brls::Box* centerContainer;
-        std::string videoTitle;
+        Domain::StreamInfo streamInfo;
         bool isPlaying = true;
         bool osdVisible = false;
-        bool loadingStream = false;
         
         brls::Time osdLastTick = 0;
         const brls::Time osdTimeout = 3000; // 3 seconds
@@ -46,20 +43,18 @@ namespace Presentation {
         
         void updatePlaybackInfo();
         std::string formatTime(double seconds);
+        void openQualitySelector();
     };
 
     class PlayerActivity : public brls::Activity {
     public:
-        PlayerActivity(const std::string& url, const std::string& title, const std::string& videoId = "");
+        PlayerActivity(const Domain::StreamInfo& info);
         ~PlayerActivity() override;
 
         brls::View* createContentView() override;
 
     private:
-        std::string videoUrl;
-        std::string videoTitle;
-        std::string videoId;
-        PlayerOverlayView* overlay = nullptr;
+        Domain::StreamInfo streamInfo;
     };
 
 } // namespace Presentation
