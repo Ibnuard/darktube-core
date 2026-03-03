@@ -20,6 +20,8 @@ namespace Presentation {
         void toggleOSD(bool show);
         void frame(brls::FrameContext* ctx) override;
 
+        void setLoadingStream(bool loading);
+
     private:
         brls::Box* topBar;
         brls::Box* bottomBar;
@@ -27,9 +29,12 @@ namespace Presentation {
         brls::Label* statusLabel;
         brls::Label* timeLabel;
         brls::ProgressSpinner* bufferingLoader;
+        brls::Label* loadingLabel;
+        brls::Box* centerContainer;
         std::string videoTitle;
         bool isPlaying = true;
         bool osdVisible = false;
+        bool loadingStream = false;
         
         brls::Time osdLastTick = 0;
         const brls::Time osdTimeout = 3000; // 3 seconds
@@ -54,6 +59,7 @@ namespace Presentation {
         std::string videoUrl;
         std::string videoTitle;
         std::string videoId;
+        PlayerOverlayView* overlay = nullptr;
     };
 
 } // namespace Presentation

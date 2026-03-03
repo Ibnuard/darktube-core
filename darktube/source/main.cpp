@@ -31,6 +31,10 @@ int main(int argc, char* argv[]) {
     brls::Logger::setLogLevel(brls::LogLevel::LOG_DEBUG);
     brls::Logger::info("DarkTube: Starting...");
 
+    // Set initial language before init
+    std::string lang = DarkTube::Data::IPRepository::getInstance().getLanguage();
+    brls::Platform::APP_LOCALE_DEFAULT = lang;
+
     // Init borealis
     if (!brls::Application::init()) {
         brls::Logger::error("Unable to init application");
@@ -41,10 +45,6 @@ int main(int argc, char* argv[]) {
 
     // Apply custom YouTube TV Dark theme
     DarkTube::Theme::applyTheme();
-
-    // Set language
-    std::string lang = DarkTube::Data::IPRepository::getInstance().getLanguage();
-    brls::Application::setLanguage(lang);
 
     // Check saved servers but always route to HomeActivity
     auto servers = DarkTube::Data::IPRepository::getInstance().getSavedServers();

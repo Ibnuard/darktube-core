@@ -7,6 +7,9 @@
 #include <borealis.hpp>
 #include "../include/presentation/ui_utils.hpp"
 
+using namespace brls::literals;
+#define _(x) brls::getStr(x)
+
 namespace {
     class SidebarItem : public brls::Box {
     private:
