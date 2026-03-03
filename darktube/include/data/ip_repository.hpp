@@ -19,6 +19,9 @@ namespace Data {
         std::vector<Domain::ServerIP> getSavedServers();
         void addServer(const Domain::ServerIP& server);
         void removeServer(const std::string& id);
+        
+        bool loadFromFile();
+        void saveToFile();
 
         // Currently active server
         void setActiveServer(const Domain::ServerIP& server);

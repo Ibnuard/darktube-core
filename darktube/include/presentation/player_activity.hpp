@@ -45,7 +45,7 @@ namespace Presentation {
 
     class PlayerActivity : public brls::Activity {
     public:
-        PlayerActivity(const std::string& url, const std::string& title);
+        PlayerActivity(const std::string& url, const std::string& title, const std::string& videoId = "");
         ~PlayerActivity() override;
 
         brls::View* createContentView() override;
@@ -53,6 +53,7 @@ namespace Presentation {
     private:
         std::string videoUrl;
         std::string videoTitle;
+        std::string videoId;
     };
 
 } // namespace Presentation

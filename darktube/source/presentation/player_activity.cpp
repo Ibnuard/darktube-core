@@ -2,6 +2,7 @@
 #include "../include/core/theme.hpp"
 #include "view/mpv_core.hpp"
 #include "../include/presentation/ui_utils.hpp"
+#include "../include/data/network_client.hpp"
 #include <borealis.hpp>
 
 namespace DarkTube {
@@ -303,11 +304,28 @@ namespace Presentation {
 
     // --- PlayerActivity ---
 
-    PlayerActivity::PlayerActivity(const std::string& url, const std::string& title) 
-        : videoUrl(url), videoTitle(title) {
+    PlayerActivity::PlayerActivity(const std::string& url, const std::string& title, const std::string& videoId) 
+        : videoUrl(url), videoTitle(title), videoId(videoId) {
         brls::Logger::info("User pushed PlayerActivity: " + videoTitle);
-        MPVCore::instance().setUrl(videoUrl);
-        MPVCore::instance().resume();
+        
+        if (videoUrl.empty() && !videoId.empty()) {
+            brls::Logger::info("URL empty, fetching stream for ID: {}", videoId);
+            Data::NetworkClient::instance().getStream(videoId, [this](const std::string& url, const std::string& error) {
+                if (!error.empty()) {
+                    brls::Logger::error("Failed to fetch stream: {}", error);
+                    // Show error in OSD or pop activity?
+                    // For now just pop back
+                    brls::Application::popActivity();
+                    return;
+                }
+                this->videoUrl = url;
+                MPVCore::instance().setUrl(this->videoUrl);
+                MPVCore::instance().resume();
+            });
+        } else if (!videoUrl.empty()) {
+            MPVCore::instance().setUrl(videoUrl);
+            MPVCore::instance().resume();
+        }
     }
 
     PlayerActivity::~PlayerActivity() {

@@ -3,6 +3,7 @@
 #include "../include/presentation/player_activity.hpp"
 #include "../include/core/theme.hpp"
 #include "../include/data/ip_repository.hpp"
+#include "../include/data/network_client.hpp"
 #include <borealis.hpp>
 #include "../include/presentation/ui_utils.hpp"
 
@@ -69,6 +70,11 @@ namespace Presentation {
 
         root->addView(split);
         root->addView(createFooterHints());
+
+        // Initial fetch
+        if (!isServerEmpty() && currentVideos.empty()) {
+            fetchTrending();
+        }
 
         // Global actions for this screen to toggle sidebar
         root->registerAction("Toggle Sidebar", brls::BUTTON_START, [this](brls::View* view) {
@@ -137,9 +143,7 @@ namespace Presentation {
                 } else if (item == "Settings") {
                     this->renderSettingsView();
                 } else if (item == "Trending") {
-                    // Re-render main content
-                    brls::Application::popActivity();
-                    brls::Application::pushActivity(new HomeActivity());
+                    this->fetchTrending();
                 }
                 return true;
             }));
@@ -179,7 +183,7 @@ namespace Presentation {
             brls::Box* gridWrapper = new brls::Box();
             gridWrapper->setAxis(brls::Axis::COLUMN);
 
-            gridWrapper->addView(createCategoryRow("Trending Entertainment"));
+            gridWrapper->addView(createCategoryRow(currentTitle, currentVideos));
 
             gridContainer->setContentView(gridWrapper);
             content->addView(gridContainer);
@@ -232,7 +236,7 @@ namespace Presentation {
         return state;
     }
 
-    brls::Box* HomeActivity::createCategoryRow(const std::string& title) {
+    brls::Box* HomeActivity::createCategoryRow(const std::string& title, const std::vector<Domain::VideoItem>& videos) {
         brls::Box* section = new brls::Box();
         section->setAxis(brls::Axis::COLUMN);
         section->setMarginBottom(40);
@@ -245,81 +249,145 @@ namespace Presentation {
         titleLabel->setMarginLeft(10);
         section->addView(titleLabel);
 
-        brls::Box* row = new brls::Box();
-        row->setAxis(brls::Axis::ROW);
-
-        for (int c = 0; c < 3; ++c) {
-            brls::Box* cardContainer = new brls::Box();
-            cardContainer->setAxis(brls::Axis::COLUMN);
-            cardContainer->setMarginRight(25); // Added gap
-            cardContainer->setMarginLeft(10); // Spacing for focus ring
-
-            // Video Thumbnail (16:9)
-            brls::Box* thumbnail = new brls::Box();
-            thumbnail->setWidth(256); 
-            thumbnail->setHeight(144);
-            thumbnail->setBackgroundColor(Theme::SurfaceDark); // Placeholder
-            thumbnail->setFocusable(true);
-            thumbnail->setCornerRadius(12);
-            
-            // Action to play
-            std::string url = "https://cdn.brid.tv/live/partners/6205/sd/69838.mp4";
-            std::string title = "Trending Video Title " + std::to_string(c+1);
-
-            if (c == 0) {
-                title = "Live Stream";
-                url = "https://cdn.brid.tv/live/partners/6205/sd/69838.mp4";
-            } else if (c == 1) {
-                title = "SD Card Test";
-                url = "sdmc:/test.mp4";
+        if (videos.empty()) {
+            brls::Box* loadingRow = new brls::Box();
+            loadingRow->setAxis(brls::Axis::ROW);
+            for (int i = 0; i < 4; i++) {
+                loadingRow->addView(UIUtils::createSkeletonVideoCard());
             }
+            section->addView(loadingRow);
+        } else {
+            brls::Box* currentRow = nullptr;
+            for (size_t i = 0; i < videos.size(); ++i) {
+                // Create a new row every 4 items
+                if (i % 4 == 0) {
+                    currentRow = new brls::Box();
+                    currentRow->setAxis(brls::Axis::ROW);
+                    section->addView(currentRow);
+                }
 
-            thumbnail->registerAction("Play", brls::BUTTON_A, [url, title](brls::View* view) {
-                brls::Logger::info("Play Video clicked: " + title);
-                brls::Application::pushActivity(new PlayerActivity(url, title));
-                return true;
-            });
-            cardContainer->addView(thumbnail);
+                const auto& video = videos[i];
+                brls::Box* cardContainer = new brls::Box();
+                cardContainer->setAxis(brls::Axis::COLUMN);
+                cardContainer->setMarginRight(25);
+                cardContainer->setMarginBottom(30);
+                cardContainer->setMarginLeft(10);
+                cardContainer->setWidth(260); // Fixed width for grid alignment
 
-            // Metadata Row (Avatar + Text)
-            brls::Box* metadata = new brls::Box();
-            metadata->setAxis(brls::Axis::ROW);
-            metadata->setMarginTop(12);
+                // Video Thumbnail (16:9)
+                brls::Image* thumbnail = new brls::Image();
+                thumbnail->setDimensions(256, 144);
+                thumbnail->setScalingType(brls::ImageScalingType::FILL); // Use FILL/COVER
+                thumbnail->setBackgroundColor(Theme::SurfaceDark);
+                thumbnail->setFocusable(true);
+                thumbnail->setCornerRadius(12);
 
-            // Channel Avatar placeholder
-            brls::Box* avatar = new brls::Box();
-            avatar->setWidth(40);
-            avatar->setHeight(40);
-            avatar->setCornerRadius(20);
-            avatar->setBackgroundColor(nvgRGB(80, 80, 80));
-            avatar->setMarginRight(15);
-            metadata->addView(avatar);
+                // Asynchronously fetch medium thumbnail
+                if (!video.thumbnailUrlMedium.empty()) {
+                    Data::NetworkClient::instance().fetchImage(video.thumbnailUrlMedium, [thumbnail](const unsigned char* data, size_t size) {
+                        if (data && size > 0) thumbnail->setImageFromMem(data, size);
+                        else thumbnail->setImageFromFile("romfs:/img/video_placeholder.png");
+                    });
+                } else {
+                    thumbnail->setImageFromFile("romfs:/img/video_placeholder.png");
+                }
 
-            // Text Info
-            brls::Box* textGroup = new brls::Box();
-            textGroup->setAxis(brls::Axis::COLUMN);
-            
-            brls::Label* vidTitle = new brls::Label();
-            vidTitle->setText(title);
-            vidTitle->setFontSize(18);
-            vidTitle->setTextColor(Theme::TextPrimary);
-            vidTitle->setMarginBottom(4);
-            textGroup->addView(vidTitle);
+                thumbnail->registerAction("Play", brls::BUTTON_A, [video](brls::View* view) {
+                    brls::Logger::info("Play Video clicked: " + video.title);
+                    brls::Application::pushActivity(new PlayerActivity("", video.title, video.id));
+                    return true;
+                });
+                cardContainer->addView(thumbnail);
 
-            brls::Label* vidChannel = new brls::Label();
-            vidChannel->setText("DarkTube Trending • 1.2M views");
-            vidChannel->setFontSize(14);
-            vidChannel->setTextColor(Theme::TextSecondary);
-            textGroup->addView(vidChannel);
+                // Metadata
+                brls::Box* metadata = new brls::Box();
+                metadata->setAxis(brls::Axis::COLUMN);
+                metadata->setMarginTop(12);
+                metadata->setWidth(256);
 
-            metadata->addView(textGroup);
-            cardContainer->addView(metadata);
+                brls::Label* vidTitle = new brls::Label();
+                vidTitle->setText(video.title);
+                vidTitle->setFontSize(18);
+                vidTitle->setTextColor(Theme::TextPrimary);
+                vidTitle->setMarginBottom(4);
+                vidTitle->setSingleLine(true);
+                metadata->addView(vidTitle);
 
-            row->addView(cardContainer);
+                brls::Label* vidChannel = new brls::Label();
+                std::string channelText = video.author;
+                if (video.views != "SEARCH_HIDDEN") {
+                    channelText += " • " + UIUtils::formatViewCount(video.views);
+                }
+                vidChannel->setText(channelText);
+                vidChannel->setFontSize(14);
+                vidChannel->setTextColor(Theme::TextSecondary);
+                metadata->addView(vidChannel);
+
+                cardContainer->addView(metadata);
+
+                currentRow->addView(cardContainer);
+            }
         }
 
-        section->addView(row);
         return section;
+    }
+
+    void HomeActivity::fetchTrending() {
+        this->currentVideos.clear();
+        this->currentTitle = "Trending Entertainment";
+        this->renderVideoGrid({}); // Show skeletons
+
+        Data::NetworkClient::instance().getTrending([this](const std::vector<Domain::VideoItem>& videos, const std::string& error) {
+            if (!error.empty()) {
+                brls::Logger::error("Failed to fetch trending: {}", error);
+                return;
+            }
+            this->currentVideos = videos;
+            this->renderVideoGrid(videos);
+        });
+    }
+
+    void HomeActivity::renderVideoGrid(const std::vector<Domain::VideoItem>& videos) {
+        // Re-render main content
+        if (mainContent) {
+            brls::Box* split = dynamic_cast<brls::Box*>(mainContent->getParent());
+            if (split) {
+                split->removeView(mainContent, true);
+                mainContent = createMainContent();
+                split->addView(mainContent);
+                // Try to restore focus if possible
+            }
+        }
+    }
+
+    void HomeActivity::promptForSearch() {
+        brls::Logger::info("Prompting for Search via IME...");
+        
+        brls::Application::getPlatform()->getImeManager()->openForText(
+            [this](std::string text) {
+                if (!text.empty()) {
+                    brls::Logger::info("Searching for: " + text);
+                    
+                    this->currentVideos.clear();
+                    this->currentTitle = "Searching: " + text;
+                    this->renderVideoGrid({}); // Show skeletons
+                    Data::NetworkClient::instance().search(text, [this, text](const std::vector<Domain::VideoItem>& videos, const std::string& error) {
+                         if (!error.empty()) {
+                            brls::Logger::error("Search failed: {}", error);
+                            return;
+                        }
+                        this->currentTitle = "Search: " + text;
+                        this->currentVideos = videos;
+                        this->renderVideoGrid(videos);
+                    });
+                }
+            },
+            "Search DarkTube",
+            "",
+            255,
+            "",
+            0
+        );
     }
 
     brls::Box* HomeActivity::createSettingsView() {
@@ -482,26 +550,6 @@ namespace Presentation {
         );
     }
 
-    void HomeActivity::promptForSearch() {
-        brls::Logger::info("Prompting for Search via IME...");
-        
-        brls::Application::getPlatform()->getImeManager()->openForText(
-            [this](std::string text) {
-                if (!text.empty()) {
-                    brls::Logger::info("Searching for: " + text);
-                    // For now, reload home activity to reset focus, later will load search results
-                    brls::Application::popActivity();
-                    brls::Application::pushActivity(new HomeActivity());
-                }
-            },
-            "Search DarkTube",
-            "",
-            255,
-            "",
-            0
-        );
-    }
-
     void HomeActivity::renderSettingsView() {
         // Replace main content with settings view
         brls::Box* rootBox = dynamic_cast<brls::Box*>(this->getContentView());
@@ -515,6 +563,5 @@ namespace Presentation {
             }
         }
     }
-
 } // namespace Presentation
 } // namespace DarkTube
