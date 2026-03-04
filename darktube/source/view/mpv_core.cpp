@@ -138,9 +138,16 @@ void MPVCore::clean() {
     }
 }
 
-void MPVCore::setUrl(const std::string &url) {
+void MPVCore::setUrl(const std::string &url, const std::string &audioUrl) {
     if (!mpv) return;
     this->eof_reached = false;
+    
+    if (!audioUrl.empty()) {
+        mpv_set_property_string(mpv, "audio-file", audioUrl.c_str());
+    } else {
+        mpv_set_property_string(mpv, "audio-file", "");
+    }
+    
     const char *cmd[] = {"loadfile", url.c_str(), NULL};
     check_error(mpv_command_async(mpv, 0, cmd));
 }

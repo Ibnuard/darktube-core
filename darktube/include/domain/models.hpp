@@ -29,11 +29,13 @@ namespace Domain {
         std::string resolution;
         std::string url;
         std::string quality;
+        std::string type;
     };
 
     struct StreamInfo {
         std::string title;
         std::string url; // default url
+        std::string audioUrl;
         std::string thumbnailUrl;
         int duration = 0;
         std::vector<StreamFormat> formats;

@@ -28,5 +28,6 @@
   "toggle_sidebar": "Buka/Tutup Sidebar",
   "change_server": "Ganti Server",
   "edit": "Ubah",
-  "delete": "Hapus"
+  "delete": "Hapus",
+  "getting_stream": "Mendapatkan url streaming..."
 }

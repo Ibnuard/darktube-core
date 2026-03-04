@@ -23,7 +23,7 @@ public:
     MPVCore();
     ~MPVCore();
 
-    void setUrl(const std::string &url);
+    void setUrl(const std::string &url, const std::string &audioUrl = "");
     void draw(brls::Rect rect, float alpha = 1.0);
 
     bool isStopped() const;

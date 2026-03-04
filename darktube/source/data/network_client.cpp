@@ -178,14 +178,47 @@ namespace Data {
                     streamInfo.thumbnailUrl = j.value("thumbnail", "");
                     streamInfo.duration = j.value("duration", 0);
 
-                    if (j.contains("formats") && j["formats"].is_array()) {
-                        for (auto& f : j["formats"]) {
-                            Domain::StreamFormat format;
-                            format.formatId = f.value("format_id", "");
-                            format.resolution = f.value("resolution", "");
-                            format.url = f.value("url", "");
-                            format.quality = f.value("quality", "");
-                            streamInfo.formats.push_back(format);
+                    if (j.contains("formats")) {
+                        if (j["formats"].is_array()) {
+                            for (auto& f : j["formats"]) {
+                                Domain::StreamFormat format;
+                                format.formatId = f.value("format_id", "");
+                                format.resolution = f.value("resolution", "");
+                                format.url = f.value("url", "");
+                                format.quality = f.value("quality", "");
+                                format.type = "muxed";
+                                streamInfo.formats.push_back(format);
+                            }
+                        } else if (j["formats"].is_object()) {
+                            auto formatsObj = j["formats"];
+                            
+                            if (formatsObj.contains("audioOnly") && formatsObj["audioOnly"].is_array() && !formatsObj["audioOnly"].empty()) {
+                                streamInfo.audioUrl = formatsObj["audioOnly"][0].value("url", "");
+                            }
+                            
+                            if (formatsObj.contains("muxed") && formatsObj["muxed"].is_array()) {
+                                for (auto& f : formatsObj["muxed"]) {
+                                    Domain::StreamFormat format;
+                                    format.formatId = f.value("format_id", "");
+                                    format.resolution = f.value("resolution", "");
+                                    format.url = f.value("url", "");
+                                    format.quality = f.value("quality", "");
+                                    format.type = "muxed";
+                                    streamInfo.formats.push_back(format);
+                                }
+                            }
+                            
+                            if (formatsObj.contains("videoOnly") && formatsObj["videoOnly"].is_array()) {
+                                for (auto& f : formatsObj["videoOnly"]) {
+                                    Domain::StreamFormat format;
+                                    format.formatId = f.value("format_id", "");
+                                    format.resolution = f.value("resolution", "");
+                                    format.url = f.value("url", "");
+                                    format.quality = f.value("quality", "");
+                                    format.type = "videoOnly";
+                                    streamInfo.formats.push_back(format);
+                                }
+                            }
                         }
                     }
                 } else if (j.contains("error")) {

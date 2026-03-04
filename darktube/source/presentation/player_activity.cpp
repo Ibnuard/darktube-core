@@ -326,9 +326,10 @@ namespace Presentation {
         for (const auto& format : streamInfo.formats) {
             std::string label = format.quality + " (" + format.resolution + ")";
             std::string url = format.url;
-            dialog->addButton(label, [url]() {
+            std::string audio = (format.type == "videoOnly") ? streamInfo.audioUrl : "";
+            dialog->addButton(label, [url, audio]() {
                 brls::Logger::info("Switching to quality: {}", url);
-                MPVCore::instance().setUrl(url);
+                MPVCore::instance().setUrl(url, audio);
                 MPVCore::instance().resume();
             });
         }
@@ -341,7 +342,7 @@ namespace Presentation {
     PlayerActivity::PlayerActivity(const Domain::StreamInfo& info) 
         : streamInfo(info) {
         brls::Logger::info("User pushed PlayerActivity: " + streamInfo.title);
-        MPVCore::instance().setUrl(streamInfo.url);
+        MPVCore::instance().setUrl(streamInfo.url, streamInfo.audioUrl);
         MPVCore::instance().resume();
     }
 

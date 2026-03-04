@@ -290,6 +290,8 @@ namespace Presentation {
                 thumbnail->setBackgroundColor(Theme::SurfaceDark);
                 thumbnail->setFocusable(true);
                 thumbnail->setCornerRadius(12);
+                thumbnail->addGestureRecognizer(new brls::TapGestureRecognizer(thumbnail));
+
 
                 // Asynchronously fetch medium thumbnail
                 if (!video.thumbnailUrlMedium.empty()) {
@@ -301,23 +303,30 @@ namespace Presentation {
                     thumbnail->setImageFromFile("romfs:/img/video_placeholder.png");
                 }
 
-                thumbnail->registerAction("Play", brls::BUTTON_A, [video](brls::View* view) {
-                    brls::Logger::info("Play Video clicked: " + video.title);
-                    
-                    // Show loading dialog
-                    brls::Dialog* loadingDialog = new brls::Dialog("main/getting_stream"_i18n);
-                    loadingDialog->setCancelable(false);
-                    loadingDialog->open();
+                    thumbnail->registerAction("Play", brls::BUTTON_A, [video](brls::View* view) {
+                        brls::Logger::info("Play Video clicked: " + video.title);
+                        
+                        // Show loading dialog
+                        brls::Dialog* loadingDialog = new brls::Dialog("main/getting_stream"_i18n);
+                        loadingDialog->setCancelable(false);
+                        
+                        // Fix focus overlap issue
+                        // Make Dialog focusable so it consumes the focus ring, 
+                        // but hide the highlight so it doesn't draw a red box around itself.
+                        loadingDialog->setFocusable(true);
+                        loadingDialog->setHideHighlight(true);
+                        
+                        loadingDialog->open();
 
-                    Data::NetworkClient::instance().getStream(video.id, [loadingDialog, video](const Domain::StreamInfo& info, const std::string& error) {
-                        loadingDialog->close([info, error, video]() {
-                            if (!error.empty()) {
-                                brls::Logger::error("Failed to fetch stream: {}", error);
-                                brls::Dialog* errorDialog = new brls::Dialog("Failed to get stream: " + error);
-                                errorDialog->addButton("OK", []() {});
-                                errorDialog->open();
-                                return;
-                            }
+                        Data::NetworkClient::instance().getStream(video.id, [loadingDialog, video](const Domain::StreamInfo& info, const std::string& error) {
+                            loadingDialog->close([info, error, video]() {
+                                if (!error.empty()) {
+                                    brls::Logger::error("Failed to fetch stream: {}", error);
+                                    brls::Dialog* errorDialog = new brls::Dialog("Failed to get stream: " + error);
+                                    errorDialog->addButton("OK", []() {});
+                                    errorDialog->open();
+                                    return;
+                                }
                             
                             // Push player with fetched info
                             brls::Application::pushActivity(new PlayerActivity(info));
