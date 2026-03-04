@@ -6,6 +6,12 @@ DarkTube adalah sebuah aplikasi _frontend homebrew_ alternatif YouTube untuk Nin
 
 Aplikasi ini menggunakan API resmi YouTube v3 untuk mengambil daftar video, hasil pencarian, dan informasi _channel_. Sementara itu, untuk proses _streaming_ video, aplikasi ini menggunakan _core_ dari [yt-dlp](https://github.com/yt-dlp/yt-dlp).
 
+## 🖼️ Showcase
+
+![SS1](images/ss1.jpg)
+![SS2](images/ss2.jpg)
+![SS3](images/ss3.jpg)
+
 ---
 
 ## 🇮🇩 Fitur Utama
@@ -80,6 +86,12 @@ Jika Anda ingin melakukan kompilasi mandiri dari _source code_, Anda memerlukan 
 DarkTube is a homebrew frontend acting as a YouTube alternative for custom firmware (CFW) Nintendo Switch consoles. Since CFW Switches lack access to the official YouTube app, DarkTube provides a solution to watch YouTube videos directly on your modern modified console.
 
 The application utilizes the official YouTube v3 API to fetch video lists, searches, and channel information. For video streaming, the core relies on `yt-dlp`.
+
+## 🖼️ Showcase
+
+![SS1](images/ss1.jpg)
+![SS2](images/ss2.jpg)
+![SS3](images/ss3.jpg)
 
 ---
 

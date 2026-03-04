@@ -142,13 +142,10 @@ void MPVCore::setUrl(const std::string &url, const std::string &audioUrl) {
     if (!mpv) return;
     this->eof_reached = false;
     
-    if (!audioUrl.empty()) {
-        mpv_set_property_string(mpv, "audio-file", audioUrl.c_str());
-    } else {
-        mpv_set_property_string(mpv, "audio-file", "");
-    }
+    // Store audio URL to add after file loads
+    this->pendingAudioUrl = audioUrl;
     
-    const char *cmd[] = {"loadfile", url.c_str(), NULL};
+    const char *cmd[] = {"loadfile", url.c_str(), "replace", NULL};
     check_error(mpv_command_async(mpv, 0, cmd));
 }
 
@@ -228,6 +225,13 @@ void MPVCore::eventMainLoop() {
             }
             case MPV_EVENT_FILE_LOADED:
                 video_stopped = false;
+                // Add external audio track if pending
+                if (!pendingAudioUrl.empty()) {
+                    brls::Logger::info("MPV: Adding external audio: {}", pendingAudioUrl);
+                    const char *audio_cmd[] = {"audio-add", pendingAudioUrl.c_str(), "select", NULL};
+                    check_error(mpv_command_async(mpv, 0, audio_cmd));
+                    pendingAudioUrl.clear();
+                }
                 break;
             case MPV_EVENT_END_FILE: {
                 video_stopped = true;

@@ -29,5 +29,6 @@
   "change_server": "Change Server",
   "edit": "Edit",
   "delete": "Delete",
-  "getting_stream": "Getting stream url..."
+  "getting_stream": "Getting stream url...",
+  "proxy_settings": "Proxy Settings"
 }

@@ -3,6 +3,7 @@
 #include "view/mpv_core.hpp"
 #include "../include/presentation/ui_utils.hpp"
 #include "../include/data/network_client.hpp"
+#include "../include/data/ip_repository.hpp"
 #include <borealis.hpp>
 
 namespace DarkTube {
@@ -322,11 +323,43 @@ namespace Presentation {
             return;
         }
 
+        bool useProxy = Data::IPRepository::getInstance().getUseProxy();
+        std::string baseUrl = "";
+        if (useProxy) {
+            auto server = Data::IPRepository::getInstance().getActiveServer();
+            if (!server.address.empty()) {
+                if (server.address.find("http") == std::string::npos) {
+                    baseUrl = "http://" + server.address + ":3000";
+                } else {
+                    baseUrl = server.address;
+                }
+            }
+        }
+
         brls::Dialog* dialog = new brls::Dialog("Select Quality");
         for (const auto& format : streamInfo.formats) {
-            std::string label = format.quality + " (" + format.resolution + ")";
-            std::string url = format.url;
-            std::string audio = (format.type == "videoOnly") ? streamInfo.audioUrl : "";
+            // Clean label: just quality + type indicator
+            std::string label = format.quality;
+            if (format.type == "muxed") {
+                label += " (A+V)";
+            }
+
+            std::string url;
+            if (useProxy && !format.proxyUrl.empty()) {
+                url = baseUrl + format.proxyUrl;
+            } else {
+                url = format.url;
+            }
+
+            std::string audio = "";
+            if (format.type == "videoOnly") {
+                if (useProxy && !streamInfo.audioProxyUrl.empty()) {
+                    audio = baseUrl + streamInfo.audioProxyUrl;
+                } else {
+                    audio = streamInfo.audioUrl;
+                }
+            }
+
             dialog->addButton(label, [url, audio]() {
                 brls::Logger::info("Switching to quality: {}", url);
                 MPVCore::instance().setUrl(url, audio);
@@ -342,7 +375,30 @@ namespace Presentation {
     PlayerActivity::PlayerActivity(const Domain::StreamInfo& info) 
         : streamInfo(info) {
         brls::Logger::info("User pushed PlayerActivity: " + streamInfo.title);
-        MPVCore::instance().setUrl(streamInfo.url, streamInfo.audioUrl);
+
+        bool useProxy = Data::IPRepository::getInstance().getUseProxy();
+        std::string playUrl = streamInfo.url;
+        std::string playAudio = streamInfo.audioUrl;
+
+        if (useProxy) {
+            auto server = Data::IPRepository::getInstance().getActiveServer();
+            std::string baseUrl = "";
+            if (!server.address.empty()) {
+                if (server.address.find("http") == std::string::npos) {
+                    baseUrl = "http://" + server.address + ":3000";
+                } else {
+                    baseUrl = server.address;
+                }
+            }
+            if (!streamInfo.proxyUrl.empty()) {
+                playUrl = baseUrl + streamInfo.proxyUrl;
+            }
+            if (!streamInfo.audioProxyUrl.empty() && !streamInfo.audioUrl.empty()) {
+                playAudio = baseUrl + streamInfo.audioProxyUrl;
+            }
+        }
+
+        MPVCore::instance().setUrl(playUrl, playAudio);
         MPVCore::instance().resume();
     }
 

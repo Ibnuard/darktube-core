@@ -61,22 +61,30 @@ namespace Data {
         return readBuffer;
     }
 
-    void NetworkClient::getTrending(Callback cb) {
-        brls::async([this, cb]() {
+    void NetworkClient::getTrending(Callback cb, const std::string& pageToken) {
+        brls::async([this, cb, pageToken]() {
             std::string baseUrl = getBaseUrl();
             if (baseUrl.empty()) {
-                brls::sync([cb]() { cb({}, "No server configured"); });
+                brls::sync([cb]() { cb({}, "", "No server configured"); });
                 return;
             }
 
-            std::string response = performGet(baseUrl + "/api/trending?maxResults=20");
+            std::string url = baseUrl + "/api/trending?maxResults=20";
+            if (!pageToken.empty()) {
+                url += "&pageToken=" + pageToken;
+            }
+
+            std::string response = performGet(url);
             std::vector<Domain::VideoItem> videos;
             std::string error = "";
+            std::string nextPageToken = "";
 
             try {
                 if (response.empty()) throw std::runtime_error("Empty response");
                 
                 json j = json::parse(response);
+                nextPageToken = j.value("nextPageToken", "");
+
                 if (j.contains("videos")) {
                     for (auto& item : j["videos"]) {
                         Domain::VideoItem video;
@@ -99,15 +107,15 @@ namespace Data {
                 brls::Logger::error("Network: getTrending failed: {}", error);
             }
 
-            brls::sync([cb, videos, error]() { cb(videos, error); });
+            brls::sync([cb, videos, nextPageToken, error]() { cb(videos, nextPageToken, error); });
         });
     }
 
-    void NetworkClient::search(const std::string& query, Callback cb) {
-        brls::async([this, query, cb]() {
+    void NetworkClient::search(const std::string& query, Callback cb, const std::string& pageToken) {
+        brls::async([this, query, cb, pageToken]() {
             std::string baseUrl = getBaseUrl();
             if (baseUrl.empty()) {
-                brls::sync([cb]() { cb({}, "No server configured"); });
+                brls::sync([cb]() { cb({}, "", "No server configured"); });
                 return;
             }
 
@@ -115,14 +123,21 @@ namespace Data {
             std::string url = baseUrl + "/api/search?q=" + std::string(encoded) + "&maxResults=20&type=video";
             curl_free(encoded);
 
+            if (!pageToken.empty()) {
+                url += "&pageToken=" + pageToken;
+            }
+
             std::string response = performGet(url);
             std::vector<Domain::VideoItem> videos;
             std::string error = "";
+            std::string nextPageToken = "";
 
             try {
                 if (response.empty()) throw std::runtime_error("Empty response");
                 
                 json j = json::parse(response);
+                nextPageToken = j.value("nextPageToken", "");
+
                 if (j.contains("videos")) {
                     for (auto& item : j["videos"]) {
                         std::string id = item.value("id", "");
@@ -152,7 +167,7 @@ namespace Data {
                 error = e.what();
             }
 
-            brls::sync([cb, videos, error]() { cb(videos, error); });
+            brls::sync([cb, videos, nextPageToken, error]() { cb(videos, nextPageToken, error); });
         });
     }
 
@@ -185,6 +200,7 @@ namespace Data {
                                 format.formatId = f.value("format_id", "");
                                 format.resolution = f.value("resolution", "");
                                 format.url = f.value("url", "");
+                                format.proxyUrl = f.value("proxyUrl", "");
                                 format.quality = f.value("quality", "");
                                 format.type = "muxed";
                                 streamInfo.formats.push_back(format);
@@ -194,6 +210,7 @@ namespace Data {
                             
                             if (formatsObj.contains("audioOnly") && formatsObj["audioOnly"].is_array() && !formatsObj["audioOnly"].empty()) {
                                 streamInfo.audioUrl = formatsObj["audioOnly"][0].value("url", "");
+                                streamInfo.audioProxyUrl = formatsObj["audioOnly"][0].value("proxyUrl", "");
                             }
                             
                             if (formatsObj.contains("muxed") && formatsObj["muxed"].is_array()) {
@@ -202,9 +219,14 @@ namespace Data {
                                     format.formatId = f.value("format_id", "");
                                     format.resolution = f.value("resolution", "");
                                     format.url = f.value("url", "");
+                                    format.proxyUrl = f.value("proxyUrl", "");
                                     format.quality = f.value("quality", "");
                                     format.type = "muxed";
                                     streamInfo.formats.push_back(format);
+                                }
+                                // Use first muxed format's proxyUrl as default
+                                if (!formatsObj["muxed"].empty()) {
+                                    streamInfo.proxyUrl = formatsObj["muxed"][0].value("proxyUrl", "");
                                 }
                             }
                             
@@ -214,6 +236,7 @@ namespace Data {
                                     format.formatId = f.value("format_id", "");
                                     format.resolution = f.value("resolution", "");
                                     format.url = f.value("url", "");
+                                    format.proxyUrl = f.value("proxyUrl", "");
                                     format.quality = f.value("quality", "");
                                     format.type = "videoOnly";
                                     streamInfo.formats.push_back(format);

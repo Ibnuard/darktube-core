@@ -3,6 +3,7 @@
 #include <borealis.hpp>
 #include "../domain/models.hpp"
 #include <vector>
+#include <memory>
 
 namespace DarkTube {
 namespace Presentation {
@@ -10,7 +11,7 @@ namespace Presentation {
     class HomeActivity : public brls::Activity {
     public:
         HomeActivity();
-        ~HomeActivity() override = default;
+        ~HomeActivity() override;
 
         brls::View* createContentView() override;
     
@@ -20,6 +21,16 @@ namespace Presentation {
         brls::Image* miniLogo;
         bool sidebarVisible = true;
 
+        // Pagination state
+        std::string nextPageToken;
+        bool isLoadingMore = false;
+        std::string currentSearchQuery;
+        std::string currentMode = "trending"; // "trending" or "search"
+        brls::Box* gridWrapper = nullptr;
+        brls::ScrollingFrame* gridContainer = nullptr;
+        brls::Box* loadingIndicator = nullptr;
+        std::shared_ptr<bool> aliveFlag = std::make_shared<bool>(true);
+
         brls::Box* createSidebar();
         brls::Box* createSidebarItem(const std::string& title, std::function<bool(brls::View*)> onClick);
         
@@ -28,6 +39,8 @@ namespace Presentation {
         brls::Box* createEmptyStateView();
         
         void fetchTrending();
+        void fetchMore();
+        void appendVideosToGrid(const std::vector<Domain::VideoItem>& videos);
         void renderVideoGrid(const std::vector<Domain::VideoItem>& videos);
 
         std::string currentTitle = "Trending Entertainment";

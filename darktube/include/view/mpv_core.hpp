@@ -61,6 +61,7 @@ private:
     mpv_handle *mpv = nullptr;
     mpv_render_context *mpv_context = nullptr;
     brls::Rect rect = {0, 0, 1920, 1080};
+    std::string pendingAudioUrl;  // External audio to add after file loads
 
     int default_framebuffer = 0;
     int flip_y = 1; // 1 to enable flipping vertically in OpenGL

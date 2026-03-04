@@ -32,11 +32,16 @@ namespace Data {
         std::string getLanguage() const { return m_language; }
         void setLanguage(const std::string& lang);
 
+        // Proxy support
+        bool getUseProxy() const { return m_useProxy; }
+        void setUseProxy(bool useProxy);
+
     private:
         IPRepository(); // Initialize with mock data
         std::vector<Domain::ServerIP> m_servers;
         Domain::ServerIP m_activeServer;
         std::string m_language = "en-US";
+        bool m_useProxy = false;
     };
 
 } // namespace Data

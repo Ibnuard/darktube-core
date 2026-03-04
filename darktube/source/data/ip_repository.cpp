@@ -48,6 +48,11 @@ namespace Data {
         saveToFile();
     }
 
+    void IPRepository::setUseProxy(bool useProxy) {
+        m_useProxy = useProxy;
+        saveToFile();
+    }
+
     void IPRepository::updateServer(const Domain::ServerIP& server) {
         for (auto& s : m_servers) {
             if (s.id == server.id) {
@@ -100,6 +105,10 @@ namespace Data {
             if (j.contains("language")) {
                 m_language = j.value("language", "en-US");
             }
+
+            if (j.contains("useProxy")) {
+                m_useProxy = j.value("useProxy", false);
+            }
             
             brls::Logger::info("IPRepository: Loaded {} servers", m_servers.size());
             return true;
@@ -126,6 +135,7 @@ namespace Data {
             {"address", m_activeServer.address}
         };
         j["language"] = m_language;
+        j["useProxy"] = m_useProxy;
 
         std::ofstream file(CONFIG_PATH);
         if (file.is_open()) {

@@ -48,6 +48,11 @@ namespace Presentation {
         brls::Logger::info("HomeActivity created");
     }
 
+    HomeActivity::~HomeActivity() {
+        brls::Logger::info("HomeActivity destroyed");
+        *aliveFlag = false; // Invalidate all async callbacks
+    }
+
     bool HomeActivity::isServerEmpty() {
         return Data::IPRepository::getInstance().getSavedServers().empty();
     }
@@ -186,16 +191,16 @@ namespace Presentation {
             content->addView(header);
 
             // Scrolling Grid area
-            brls::ScrollingFrame* gridContainer = new brls::ScrollingFrame();
-            gridContainer->setGrow(1.0f);
+            this->gridContainer = new brls::ScrollingFrame();
+            this->gridContainer->setGrow(1.0f);
             
-            brls::Box* gridWrapper = new brls::Box();
-            gridWrapper->setAxis(brls::Axis::COLUMN);
+            this->gridWrapper = new brls::Box();
+            this->gridWrapper->setAxis(brls::Axis::COLUMN);
 
-            gridWrapper->addView(createCategoryRow(currentTitle, currentVideos));
+            this->gridWrapper->addView(createCategoryRow(currentTitle, currentVideos));
 
-            gridContainer->setContentView(gridWrapper);
-            content->addView(gridContainer);
+            this->gridContainer->setContentView(this->gridWrapper);
+            content->addView(this->gridContainer);
         }
 
         return content;
@@ -334,6 +339,15 @@ namespace Presentation {
                     });
                     return true;
                 });
+
+                // Load more when focusing on items in last 2 rows
+                if (videos.size() >= 8 && i + 8 >= videos.size()) {
+                    thumbnail->registerAction("LoadMore", brls::BUTTON_NAV_DOWN, [this](brls::View* v) {
+                        this->fetchMore();
+                        return false; // Let navigation continue
+                    });
+                }
+
                 cardContainer->addView(thumbnail);
 
                 // Metadata
@@ -372,27 +386,207 @@ namespace Presentation {
     void HomeActivity::fetchTrending() {
         this->currentVideos.clear();
         this->currentTitle = _("main/trending");
+        this->nextPageToken = "";
+        this->isLoadingMore = false;
+        this->currentMode = "trending";
+        this->currentSearchQuery = "";
         this->renderVideoGrid({}); // Show skeletons
 
-        Data::NetworkClient::instance().getTrending([this](const std::vector<Domain::VideoItem>& videos, const std::string& error) {
+        auto flag = this->aliveFlag;
+        Data::NetworkClient::instance().getTrending([this, flag](const std::vector<Domain::VideoItem>& videos, const std::string& nextToken, const std::string& error) {
+            if (!*flag) return;
             if (!error.empty()) {
                 brls::Logger::error("Failed to fetch trending: {}", error);
                 return;
             }
             this->currentVideos = videos;
+            this->nextPageToken = nextToken;
             this->renderVideoGrid(videos);
         });
     }
 
+    void HomeActivity::fetchMore() {
+        if (isLoadingMore || nextPageToken.empty()) return;
+
+        // Memory safety: cap total items to prevent OOM on Switch
+        if (currentVideos.size() >= 80) {
+            brls::Logger::info("Max items reached ({}), stopping pagination", currentVideos.size());
+            return;
+        }
+
+        isLoadingMore = true;
+
+        brls::Logger::info("Fetching more: mode={}, pageToken={}", currentMode, nextPageToken);
+
+        // Show loading indicator at bottom
+        if (gridWrapper) {
+            loadingIndicator = new brls::Box();
+            loadingIndicator->setAxis(brls::Axis::ROW);
+            loadingIndicator->setJustifyContent(brls::JustifyContent::CENTER);
+            loadingIndicator->setAlignItems(brls::AlignItems::CENTER);
+            loadingIndicator->setHeight(60);
+            loadingIndicator->setWidthPercentage(100);
+            loadingIndicator->setMarginTop(10);
+
+            brls::Label* loadingLabel = new brls::Label();
+            loadingLabel->setText("Loading more...");
+            loadingLabel->setFontSize(18);
+            loadingLabel->setTextColor(Theme::TextSecondary);
+            loadingIndicator->addView(loadingLabel);
+
+            gridWrapper->addView(loadingIndicator);
+        }
+
+        // Use alive flag to guard against dangling this pointer
+        auto flag = this->aliveFlag;
+        auto callback = [this, flag](const std::vector<Domain::VideoItem>& videos, const std::string& nextToken, const std::string& error) {
+            if (!*flag) return; // HomeActivity was destroyed
+
+            // Remove loading indicator
+            if (loadingIndicator && gridWrapper) {
+                gridWrapper->removeView(loadingIndicator, true);
+                loadingIndicator = nullptr;
+            }
+
+            isLoadingMore = false;
+
+            if (!error.empty()) {
+                brls::Logger::error("Failed to fetch more: {}", error);
+                return;
+            }
+
+            this->nextPageToken = nextToken;
+            // Append new videos
+            for (const auto& v : videos) {
+                this->currentVideos.push_back(v);
+            }
+            this->appendVideosToGrid(videos);
+        };
+
+        if (currentMode == "trending") {
+            Data::NetworkClient::instance().getTrending(callback, nextPageToken);
+        } else if (currentMode == "search") {
+            Data::NetworkClient::instance().search(currentSearchQuery, callback, nextPageToken);
+        }
+    }
+
+    void HomeActivity::appendVideosToGrid(const std::vector<Domain::VideoItem>& videos) {
+        if (!gridWrapper || videos.empty()) return;
+
+        // Build new rows and append to gridWrapper
+        brls::Box* currentRow = nullptr;
+
+        // Figure out how many items are in the last existing row
+        // We always start from the count offset in the existing grid
+        size_t existingCount = currentVideos.size() - videos.size(); // count before append
+        size_t startOffset = existingCount % 4;
+
+        for (size_t i = 0; i < videos.size(); ++i) {
+            size_t gridPos = startOffset + i;
+            if (gridPos % 4 == 0) {
+                currentRow = new brls::Box();
+                currentRow->setAxis(brls::Axis::ROW);
+                gridWrapper->addView(currentRow);
+            }
+
+            const auto& video = videos[i];
+            brls::Box* cardContainer = new brls::Box();
+            cardContainer->setAxis(brls::Axis::COLUMN);
+            cardContainer->setMarginRight(25);
+            cardContainer->setMarginBottom(30);
+            cardContainer->setMarginLeft(10);
+            cardContainer->setWidth(260);
+
+            brls::Image* thumbnail = new brls::Image();
+            thumbnail->setDimensions(256, 144);
+            thumbnail->setScalingType(brls::ImageScalingType::FILL);
+            thumbnail->setBackgroundColor(Theme::SurfaceDark);
+            thumbnail->setFocusable(true);
+            thumbnail->setCornerRadius(12);
+            thumbnail->addGestureRecognizer(new brls::TapGestureRecognizer(thumbnail));
+
+            if (!video.thumbnailUrlMedium.empty()) {
+                Data::NetworkClient::instance().fetchImage(video.thumbnailUrlMedium, [thumbnail](const unsigned char* data, size_t size) {
+                    if (data && size > 0) thumbnail->setImageFromMem(data, size);
+                    else thumbnail->setImageFromFile("romfs:/img/video_placeholder.png");
+                });
+            } else {
+                thumbnail->setImageFromFile("romfs:/img/video_placeholder.png");
+            }
+
+            // Play action
+            thumbnail->registerAction("Play", brls::BUTTON_A, [video](brls::View* view) {
+                brls::Logger::info("Play Video clicked: " + video.title);
+                brls::Dialog* loadingDialog = new brls::Dialog("main/getting_stream"_i18n);
+                loadingDialog->setCancelable(false);
+                loadingDialog->setFocusable(true);
+                loadingDialog->setHideHighlight(true);
+                loadingDialog->open();
+
+                Data::NetworkClient::instance().getStream(video.id, [loadingDialog, video](const Domain::StreamInfo& info, const std::string& error) {
+                    loadingDialog->close([info, error, video]() {
+                        if (!error.empty()) {
+                            brls::Logger::error("Failed to fetch stream: {}", error);
+                            brls::Dialog* errorDialog = new brls::Dialog("Failed to get stream: " + error);
+                            errorDialog->addButton("OK", []() {});
+                            errorDialog->open();
+                            return;
+                        }
+                        brls::Application::pushActivity(new PlayerActivity(info));
+                    });
+                });
+                return true;
+            });
+
+            // Load more when focusing on items in the last 2 rows
+            if (videos.size() >= 8 && i + 8 >= videos.size()) {
+                thumbnail->registerAction("LoadMore", brls::BUTTON_NAV_DOWN, [this](brls::View* v) {
+                    this->fetchMore();
+                    return false; // Let navigation continue
+                });
+            }
+
+            cardContainer->addView(thumbnail);
+
+            brls::Box* metadata = new brls::Box();
+            metadata->setAxis(brls::Axis::COLUMN);
+            metadata->setMarginTop(12);
+            metadata->setWidth(256);
+
+            brls::Label* vidTitle = new brls::Label();
+            vidTitle->setText(video.title);
+            vidTitle->setFontSize(18);
+            vidTitle->setTextColor(Theme::TextPrimary);
+            vidTitle->setMarginBottom(4);
+            vidTitle->setSingleLine(true);
+            metadata->addView(vidTitle);
+
+            brls::Label* vidChannel = new brls::Label();
+            std::string channelText = video.author;
+            if (video.views != "SEARCH_HIDDEN") {
+                channelText += " • " + UIUtils::formatViewCount(video.views);
+            }
+            vidChannel->setText(channelText);
+            vidChannel->setFontSize(14);
+            vidChannel->setTextColor(Theme::TextSecondary);
+            metadata->addView(vidChannel);
+
+            cardContainer->addView(metadata);
+            currentRow->addView(cardContainer);
+        }
+    }
+
     void HomeActivity::renderVideoGrid(const std::vector<Domain::VideoItem>& videos) {
         // Re-render main content
+        this->gridWrapper = nullptr;
+        this->gridContainer = nullptr;
+        this->loadingIndicator = nullptr;
         if (mainContent) {
             brls::Box* split = dynamic_cast<brls::Box*>(mainContent->getParent());
             if (split) {
                 split->removeView(mainContent, true);
                 mainContent = createMainContent();
                 split->addView(mainContent);
-                // Try to restore focus if possible
             }
         }
     }
@@ -407,14 +601,22 @@ namespace Presentation {
                     
                     this->currentVideos.clear();
                     this->currentTitle = _("main/searching") + ": " + text;
+                    this->nextPageToken = "";
+                    this->isLoadingMore = false;
+                    this->currentMode = "search";
+                    this->currentSearchQuery = text;
                     this->renderVideoGrid({}); // Show skeletons
-                    Data::NetworkClient::instance().search(text, [this, text](const std::vector<Domain::VideoItem>& videos, const std::string& error) {
-                         if (!error.empty()) {
+
+                    auto flag = this->aliveFlag;
+                    Data::NetworkClient::instance().search(text, [this, text, flag](const std::vector<Domain::VideoItem>& videos, const std::string& nextToken, const std::string& error) {
+                        if (!*flag) return;
+                        if (!error.empty()) {
                             brls::Logger::error("Search failed: {}", error);
                             return;
                         }
                         this->currentTitle = _("main/search") + ": " + text;
                         this->currentVideos = videos;
+                        this->nextPageToken = nextToken;
                         this->renderVideoGrid(videos);
                     });
                 }
@@ -536,7 +738,8 @@ namespace Presentation {
         brls::Box* enBtn = createSidebarItem("English" + (std::string)(currentLang == "en-US" ? " ✓" : ""), [this](brls::View* v) {
             if (Data::IPRepository::getInstance().getLanguage() != "en-US") {
                 Data::IPRepository::getInstance().setLanguage("en-US");
-                brls::Application::setLanguage("en-US");
+                brls::Platform::APP_LOCALE_DEFAULT = "en-US";
+                brls::loadTranslations();
                 brls::Application::popActivity();
                 brls::Application::pushActivity(new HomeActivity());
             }
@@ -549,7 +752,8 @@ namespace Presentation {
         brls::Box* idBtn = createSidebarItem("Bahasa Indonesia" + (std::string)(currentLang == "id-ID" ? " ✓" : ""), [this](brls::View* v) {
             if (Data::IPRepository::getInstance().getLanguage() != "id-ID") {
                 Data::IPRepository::getInstance().setLanguage("id-ID");
-                brls::Application::setLanguage("id-ID");
+                brls::Platform::APP_LOCALE_DEFAULT = "id-ID";
+                brls::loadTranslations();
                 brls::Application::popActivity();
                 brls::Application::pushActivity(new HomeActivity());
             }
@@ -557,6 +761,26 @@ namespace Presentation {
         });
         idBtn->setMarginBottom(30);
         inner->addView(idBtn);
+
+        // --- PROXY SECTION ---
+        brls::Label* proxyHeader = new brls::Label();
+        proxyHeader->setText(_("main/proxy_settings"));
+        proxyHeader->setFontSize(24);
+        proxyHeader->setTextColor(Theme::TextPrimary);
+        proxyHeader->setMarginTop(10);
+        proxyHeader->setMarginBottom(10);
+        inner->addView(proxyHeader);
+
+        bool currentProxy = Data::IPRepository::getInstance().getUseProxy();
+        std::string proxyLabel = "Use Proxy: " + std::string(currentProxy ? "ON ✓" : "OFF");
+        brls::Box* proxyBtn = createSidebarItem(proxyLabel, [this](brls::View* v) {
+            bool current = Data::IPRepository::getInstance().getUseProxy();
+            Data::IPRepository::getInstance().setUseProxy(!current);
+            this->renderSettingsView(); // Refresh to show updated state
+            return true;
+        });
+        proxyBtn->setMarginBottom(30);
+        inner->addView(proxyBtn);
 
         // --- INFO SECTIONS ---
 

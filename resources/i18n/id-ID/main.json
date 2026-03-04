@@ -29,5 +29,6 @@
   "change_server": "Ganti Server",
   "edit": "Ubah",
   "delete": "Hapus",
-  "getting_stream": "Mendapatkan url streaming..."
+  "getting_stream": "Mendapatkan url streaming...",
+  "proxy_settings": "Pengaturan Proxy"
 }
